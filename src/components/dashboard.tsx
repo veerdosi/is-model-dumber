@@ -48,13 +48,25 @@ import { cn } from "@/lib/utils";
 import { taskDiagnostics } from "@/lib/measurement";
 type View = "overview" | "model" | "evidence" | "incidents" | "methodology";
 function date(t: string, full = false) {
-  return new Intl.DateTimeFormat("en", {
-    month: "short",
-    day: "numeric",
-    ...(full
-      ? { hour: "2-digit", minute: "2-digit", timeZoneName: "short" }
-      : {}),
-  }).format(new Date(t));
+  const d = new Date(t);
+  const month = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+  ][d.getUTCMonth()];
+  const day = `${month} ${d.getUTCDate()}`;
+  return full
+    ? `${day}, ${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")} UTC`
+    : day;
 }
 function score(n: number | null | undefined) {
   return n == null ? "—" : `${Math.round(n * 100)}%`;
@@ -160,7 +172,7 @@ export function Dashboard({
   const baselinesReady = summaries.every(
     (s) => !["observing", "insufficient_evidence"].includes(s.status),
   );
-  const cutoff = Date.now() - days * 86400000;
+  const cutoff = Date.parse(data.fetchedAt) - days * 86400000;
   const chartRows = data.runs
     .filter(
       (r) =>
@@ -642,7 +654,7 @@ export function Dashboard({
                 <div
                   className="chart-area"
                   role="img"
-                  aria-label={`${metric === "changes" ? "Item outcome changes" : metric === "score" ? "Task completion" : "Latency"} history over ${days} days. ${chartHasData ? `${chartRows.length} observations.` : metric === "changes" && chartRows.length ? `${chartRows.length} observation recorded; a repeat is needed for comparison.` : "No observations available."}`}
+                  aria-label={`${metric === "changes" ? "Item outcome changes" : metric === "score" ? "Task completion" : "Latency"} history over ${days} days. ${chartHasData ? `${chartRows.length} observation${chartRows.length === 1 ? "" : "s"}.` : metric === "changes" && chartRows.length ? `${chartRows.length} observation recorded; a repeat is needed for comparison.` : "No observations available."}`}
                 >
                   {chartHasData ? (
                     <ResponsiveContainer width="100%" height="100%">
@@ -1117,7 +1129,7 @@ export function Dashboard({
         </div>
         <div className="footer-bottom">
           <p>Independent project. Not affiliated with OpenAI.</p>
-          <span>© {new Date().getFullYear()}</span>
+          <span>© {new Date(data.fetchedAt).getUTCFullYear()}</span>
         </div>
       </footer>
       {selected && (
