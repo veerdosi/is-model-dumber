@@ -29,7 +29,8 @@ Run the reference validator once during setup, before a baseline:
    creates exactly 30 jobs and pins the 21-day freeze. Repeat keys reuse that run.
 2. `plan.json` under ignored `.runs/<uuid>/` supplies names, model IDs and prompt
    paths. Spawn fresh agents with those exact names, models and medium effort.
-   The runtime may cap concurrency below 15. Queue the rest, never drop jobs.
+   Use the matching `evaluate_terra`, `evaluate_luna`, or `evaluate_sol` role when
+   native agent-type selection is available. The runtime may cap concurrency below 15. Queue the rest, never drop jobs.
 3. Task prompts define allowed assets and limits. Do not put private references
    or historical results in evaluator context. No hints or answer repair.
 4. Immediately before an ARC3 evaluator, run
@@ -76,3 +77,15 @@ Native desktop subagents share a host filesystem. Scratch workspaces, fresh
 contexts, tool profiles (where selectable), and explicit access constraints keep
 references out of normal task execution, but are not adversarial OS isolation.
 Do not describe this as a tamper-proof benchmark sandbox.
+
+## Explicit partial publication
+
+When the user asks to publish completed results before every item is available,
+use `npm run eval:publish -- --partial`. It publishes only verified scored records
+and labels the evaluation partial. Incomplete model panels display passed/graded
+counts; they do not become historical ten-item accuracy points. A later append
+may add missing verified observations, but it cannot alter an already published
+response hash or score. Normal publication still requires all 30 terminal jobs.
+
+Setup-debug records do not belong in public history or Git history. Keep only
+general causes and prevention notes in `docs/setup-fixes.md`.

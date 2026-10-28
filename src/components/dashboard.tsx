@@ -127,7 +127,25 @@ export function Dashboard({
     };
   }, [selected]);
   const summaries = useMemo(
-    () => MODELS.map((m) => summarize(m, data.attempts, data.runs)),
+    () =>
+      MODELS.map((m) => {
+        const summary = summarize(m, data.attempts, data.runs);
+        const rows = data.attempts.filter(
+          (a) =>
+            a.model === m && a.run_id === data.runs[0]?.id && a.score !== null,
+        );
+        return {
+          ...summary,
+          partial:
+            rows.length > 0 && rows.length < 10
+              ? {
+                  passed: rows.filter((a) => a.score === 1).length,
+                  scored: rows.length,
+                  items: rows,
+                }
+              : null,
+        };
+      }),
     [data],
   );
   const active = model ? summaries.find((s) => s.model === model)! : null;
@@ -208,7 +226,6 @@ export function Dashboard({
   }
   const nav = [
     ["/", "Overview"],
-    ["/#models", "Models"],
     ["/incidents", "Incidents"],
     ["/about", "About"],
   ];
@@ -362,18 +379,24 @@ export function Dashboard({
                     )}
                   />
                   {model
-                    ? STATUS_LABELS[active!.status]
+                    ? active!.partial
+                      ? "Partial result published"
+                      : STATUS_LABELS[active!.status]
                     : hasRegressions
                       ? "A signal worth investigating"
                       : baselinesReady
                         ? "No persistent decline observed"
-                        : "Not enough evidence yet."}
+                        : data.attempts.length
+                          ? "Establishing a baseline."
+                          : "Awaiting first results."}
                 </div>
                 <p>
                   {model
                     ? active!.latest
                       ? `${active!.series.length} complete observations. ${active!.status === "observing" ? "More comparable runs are needed before assessing change." : "Compare changes with item-level evidence below."}`
-                      : "No complete, comparable observation is available yet."
+                      : active!.partial
+                        ? `${active!.partial.passed} of ${active!.partial.scored} graded tasks passed. The remaining task is not included.`
+                        : "No complete, comparable observation is available yet."
                     : hasRegressions
                       ? "At least one model shows a persistent decline on this task panel. This is an exploratory signal, not a confirmed change in general intelligence."
                       : baselinesReady
@@ -382,17 +405,8 @@ export function Dashboard({
                 </p>
                 <div className="verdict-meta-inline">
                   <span>
-                    {model
-                      ? active!.series.length
-                      : data.runs.filter((r) => r.status === "complete")
-                          .length}{" "}
-                    complete run
-                    {(model
-                      ? active!.series.length
-                      : data.runs.filter((r) => r.status === "complete")
-                          .length) === 1
-                      ? ""
-                      : "s"}
+                    {data.runs.length} published evaluation
+                    {data.runs.length === 1 ? "" : "s"}
                   </span>
                   <i />
                   <span>{data.tasks.length} fixed tasks</span>
@@ -444,11 +458,17 @@ export function Dashboard({
                         </div>
                       </div>
                       <div className="model-score">
-                        {score(s.latest?.score)}
+                        {s.latest
+                          ? score(s.latest.score)
+                          : s.partial
+                            ? `${s.partial.passed}/${s.partial.scored}`
+                            : "—"}
                         <small>
                           {s.latest
                             ? `${s.latest.items.filter((a) => a.score === 1).length} / 10 passed`
-                            : "No complete run"}
+                            : s.partial
+                              ? "partial result"
+                              : "Awaiting result"}
                         </small>
                       </div>
                       <div
@@ -462,7 +482,11 @@ export function Dashboard({
                           : `${s.delta > 0 ? "+" : ""}${(s.delta * 100).toFixed(1)} pp`}
                         <small>
                           {s.series.length < 7
-                            ? "Baseline pending"
+                            ? s.series.length
+                              ? "More runs needed"
+                              : s.partial
+                                ? `${s.partial.scored}/10 tasks graded`
+                                : "—"
                             : "vs. first 6 runs"}
                         </small>
                       </div>
@@ -483,9 +507,13 @@ export function Dashboard({
                         >
                           <span className="status-dot" />
                           {s.status === "insufficient_evidence"
-                            ? "Awaiting data"
+                            ? s.partial
+                              ? "Partial result"
+                              : "Awaiting data"
                             : s.status === "observing"
-                              ? "Baseline collecting"
+                              ? s.series.length === 1
+                                ? "First observation"
+                                : "Observing"
                               : s.status === "possible_regression"
                                 ? "Investigating"
                                 : s.status === "recovery"

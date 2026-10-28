@@ -173,16 +173,14 @@ if (command === "seed") {
   )
     throw new Error("Immutable suite mismatch");
   if (!prior.data?.length) {
-    const r = await client
-      .from("suites")
-      .insert({
-        id: manifest.id,
-        title: manifest.title,
-        manifest_hash: manifest.manifest_hash,
-        frozen_at: plan.freeze.frozenAt,
-        frozen_until: plan.freeze.frozenUntil,
-        protocol: manifest.protocol,
-      });
+    const r = await client.from("suites").insert({
+      id: manifest.id,
+      title: manifest.title,
+      manifest_hash: manifest.manifest_hash,
+      frozen_at: plan.freeze.frozenAt,
+      frozen_until: plan.freeze.frozenUntil,
+      protocol: manifest.protocol,
+    });
     if (r.error) throw r.error;
   }
   const r = await client.from("tasks").upsert(manifest.tasks);
@@ -483,15 +481,23 @@ if (command === "seed") {
 } else if (command === "publish") {
   checkManifest();
   const { dir, plan } = load();
-  const attempts = plan.jobs.map((j: any) => {
+  const allowPartial = process.argv.includes("--partial");
+  const attempts = plan.jobs.flatMap((j: any) => {
     const path = join(j.workdir, "attempt.json");
-    if (!existsSync(path))
-      throw new Error(`Ungraded job ${j.agent}. No partial score publication.`);
-    return JSON.parse(readFileSync(path, "utf8"));
+    if (!existsSync(path)) {
+      if (allowPartial) return [];
+      throw new Error(
+        `Ungraded job ${j.agent}. Use --partial only for explicitly requested partial publication.`,
+      );
+    }
+    const attempt = JSON.parse(readFileSync(path, "utf8"));
+    return allowPartial && attempt.score === null ? [] : [attempt];
   });
   if (
-    attempts.length !== 30 ||
-    new Set(attempts.map((a: any) => `${a.model}:${a.task_id}`)).size !== 30
+    (!allowPartial && attempts.length !== 30) ||
+    attempts.length === 0 ||
+    new Set(attempts.map((a: any) => `${a.model}:${a.task_id}`)).size !==
+      attempts.length
   )
     throw new Error("Expected 30 independent unique jobs");
   const client = db();
@@ -510,19 +516,18 @@ if (command === "seed") {
     throw new Error("Published suite hash differs. Refuse history rewrite.");
   if (!existing.length)
     await must(
-      client
-        .from("suites")
-        .insert({
-          id: manifest.id,
-          title: manifest.title,
-          manifest_hash: manifest.manifest_hash,
-          frozen_at: plan.freeze.frozenAt,
-          frozen_until: plan.freeze.frozenUntil,
-          protocol: manifest.protocol,
-        }),
+      client.from("suites").insert({
+        id: manifest.id,
+        title: manifest.title,
+        manifest_hash: manifest.manifest_hash,
+        frozen_at: plan.freeze.frozenAt,
+        frozen_until: plan.freeze.frozenUntil,
+        protocol: manifest.protocol,
+      }),
     );
   await must(client.from("tasks").upsert(manifest.tasks));
-  const complete = attempts.every((a: any) => a.score !== null);
+  const complete =
+    attempts.length === 30 && attempts.every((a: any) => a.score !== null);
   const run: any = {
     id: plan.id,
     idempotency_key: plan.key,
@@ -538,16 +543,39 @@ if (command === "seed") {
   };
   // Stage everything privately. Public visibility flips with a single final row update.
   const already = await must(
-    client.from("runs").select("published").eq("id", run.id),
+    client.from("runs").select("published,status").eq("id", run.id),
   );
-  if (already[0]?.published) {
+  if (already[0]?.published && already[0]?.status === "complete") {
     console.log(
       "Run already published; leaving immutable evidence unchanged.",
       run.id,
     );
     process.exit(0);
   }
-  await must(client.from("runs").upsert({ ...run, published: false }));
+  if (already[0]?.published) {
+    const stored = await must(
+      client
+        .from("attempts")
+        .select("model,task_id,response_hash,score")
+        .eq("run_id", run.id),
+    );
+    for (const old of stored) {
+      const next = attempts.find(
+        (a: any) => a.model === old.model && a.task_id === old.task_id,
+      );
+      if (
+        !next ||
+        next.response_hash !== old.response_hash ||
+        next.score !== old.score
+      )
+        throw new Error("Refusing to alter an already published observation.");
+    }
+  }
+  await must(
+    client
+      .from("runs")
+      .upsert({ ...run, published: already[0]?.published ?? false }),
+  );
   await must(
     client
       .from("attempts")
@@ -562,7 +590,7 @@ if (command === "seed") {
     const summary = summarize(
       model,
       [...history.filter((a: any) => a.run_id !== run.id), ...attempts],
-      [...historyRuns, run],
+      [...historyRuns.filter((r: any) => r.id !== run.id), run],
     );
     if (["possible_regression", "recovery"].includes(summary.status))
       incidents.push({

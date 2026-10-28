@@ -1,5 +1,5 @@
 {
-  "validated_at": "2026-10-28T10:46:57Z",
+  "validated_at": "2026-10-28T11:20:27Z",
   "manifest_hash": "b2f2982910c63e0d7c4fecd1b5c29c90eab17bb11b04bf29f85e3089d63ea33d",
   "checks": [
     "01-arc2: upstream exact grids and dimensions validated (semantic ambiguity not eliminated)",

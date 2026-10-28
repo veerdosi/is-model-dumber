@@ -12,13 +12,15 @@ explicit model overrides and `reasoning_effort="medium"`. Exactly these models:
    `npm run eval:prepare -- --key=<unique-manual-trigger-id>` creates 30 jobs.
 2. Native tool availability is authoritative. Queue all 30 independent model-item
    jobs. Maximum 15 concurrently, or fewer when runtime capacity is smaller. The
-   current desktop tool has four total slots including the coordinator: normally
-   three active evaluators. Continue batches until all 30 finish.
+   runtime may expose 16 total slots including the coordinator, permitting 15
+   evaluators. Use the actual advertised capacity. Continue batches until all 30 finish.
 3. For each job, spawn its exact planned `agent` name, explicit `model`, medium
    reasoning and fresh context. Tell it to read ONLY `promptPath`, use only its
    job directory for scratch, obey the 480-second budget and return the specified
    JSON. Do not send grader source, answers, or historical responses. Custom agents
-   in `.codex/agents/` encode the same settings when custom-agent selection exists.
+   in `.codex/agents/` encode the same settings. When `agent_type` is exposed, use
+   `evaluate_terra`, `evaluate_luna`, or `evaluate_sol` respectively; these roles
+   fix the model and medium reasoning and disable unrelated apps/memory/skills.
    Do not claim these profiles restrict tools when using a runtime that cannot
    select them. Native tools in this desktop session share host filesystem access;
    isolation is protocol-enforced, not an adversarial security boundary.
@@ -43,6 +45,11 @@ explicit model overrides and `reasoning_effort="medium"`. Exactly these models:
    published evidence. It inserts real data into Supabase; the site refreshes
    without redeployment. Confirm `/api/observations` on the production URL includes
    this run ID and its 30 records.
+   An explicitly requested partial publication uses `npm run eval:publish -- --partial`.
+   It publishes only verified scored observations, labels the run partial, and never
+   includes setup-debug attempts. Do not present an incomplete panel as comparable
+   full-panel accuracy. A terminal run already published partially can be followed
+   by a new manual run; do not endlessly resume a discarded setup attempt.
 8. Report per-model passed/scored counts, changes, unavailable tasks, measured
    latency and token counts. Report monetary cost as unavailable when the native
    subscription runtime does not expose billing. First observations have no trend.
