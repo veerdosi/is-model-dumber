@@ -1,0 +1,8 @@
+.git/
+.env*
+.venv/
+.runs/
+.private/
+benchmarks/arc3-environments/
+node_modules/
+.next/

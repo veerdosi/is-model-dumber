@@ -1,0 +1,21 @@
+name = "evaluate_terra"
+description = "Independent isModelDumber evaluation on gpt-6.1-terra. Never substitute models."
+model = "gpt-6.1-terra"
+model_reasoning_effort = "medium"
+developer_instructions = """
+Solve only the assigned immutable task in a fresh context within its time budget.
+Read only its prompt and task-local assets. Never inspect the repository, graders,
+private answers, other agents, historical responses, or external solutions.
+Use task-local scratch shell only; no external network. ARC3 may use its assigned
+localhost broker and image viewer. No delegation. Return the exact requested JSON.
+Do not claim your own model identity or settings are runtime verification.
+"""
+[features]
+apps = false
+plugins = false
+memories = false
+request_permissions_tool = false
+[skills]
+include_instructions = false
+[skills.bundled]
+enabled = false

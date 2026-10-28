@@ -1,0 +1,17 @@
+node_modules/
+.next/
+out/
+.env*
+!.env.example
+.vercel/
+.venv/
+.runs/
+.private/
+playwright-report/
+test-results/
+*.tsbuildinfo
+environment_files/
+recordings/
+.vercel
+benchmarks/arc3-environments/
+__pycache__/
