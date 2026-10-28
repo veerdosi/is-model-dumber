@@ -1,4 +1,5 @@
 import type { Attempt, Model, Run } from "./types";
+import { comparePanels } from "./measurement";
 export type Verdict =
   | "insufficient_evidence"
   | "observing"
@@ -42,6 +43,15 @@ export function summarize(model: Model, attempts: Attempt[], runs: Run[]) {
   });
   const latest = series.at(-1);
   const comparable = series.filter((p) => p.suiteId === latest?.suiteId);
+  const changesByRun = Object.fromEntries(
+    comparable.map((point, index) => [
+      point.runId,
+      index > 0
+        ? comparePanels(comparable[index - 1].items, point.items)
+        : null,
+    ]),
+  );
+  const changes = latest ? (changesByRun[latest.runId] ?? null) : null;
   const baseline = comparable.slice(0, 6);
   const recent = comparable.slice(-3);
   const baselineMean = baseline.length
@@ -131,6 +141,8 @@ export function summarize(model: Model, attempts: Attempt[], runs: Run[]) {
     delta,
     errors,
     total: all.length,
+    changes,
+    changesByRun,
     pairedLosses,
     pairedGains,
     pValue,

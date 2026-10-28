@@ -67,8 +67,10 @@ npx vercel --prod
 
 Production uses dynamic routes, explicit no-store data fetching, security headers,
 server-side public-key reads, and polling. Original responses and action traces
-load on demand, keeping the overview small. Charts preserve gaps and a single
-observation is shown as a point, never an invented historical line.
+load on demand, keeping the overview small. The overview leads with within-model item changes; strict task completion is a
+secondary count. Task pages retain native grader diagnostics and observed outcome
+flips, without a replacement intelligence index. Charts preserve gaps: one run
+can form a completion point but cannot form a change comparison.
 
 ## Documentation
 

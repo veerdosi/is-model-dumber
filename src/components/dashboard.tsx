@@ -45,6 +45,7 @@ import {
 } from "@/lib/types";
 import { summarize, STATUS_LABELS, median } from "@/lib/monitor";
 import { cn } from "@/lib/utils";
+import { taskDiagnostics } from "@/lib/measurement";
 type View = "overview" | "model" | "evidence" | "incidents" | "methodology";
 function date(t: string, full = false) {
   return new Intl.DateTimeFormat("en", {
@@ -74,7 +75,9 @@ export function Dashboard({
   const [refreshing, setRefreshing] = useState(false);
   const [fetchFailed, setFetchFailed] = useState(false);
   const [days, setDays] = useState(30);
-  const [metric, setMetric] = useState<"score" | "latency">("score");
+  const [metric, setMetric] = useState<"changes" | "score" | "latency">(
+    "changes",
+  );
   const [visible, setVisible] = useState<Model[]>(
     model ? [model] : [...MODELS],
   );
@@ -111,7 +114,9 @@ export function Dashboard({
     const p = new URLSearchParams(location.search);
     const d = Number(p.get("days"));
     if ([7, 30, 90].includes(d)) setDays(d);
-    if (p.get("metric") === "latency") setMetric("latency");
+    const requested = p.get("metric");
+    if (requested && ["changes", "score", "latency"].includes(requested))
+      setMetric(requested as "changes" | "score" | "latency");
   }, []);
   useEffect(() => {
     if (!selected) return;
@@ -170,13 +175,21 @@ export function Dashboard({
       };
       for (const s of summaries) {
         const p = s.series.find((p) => p.runId === r.id);
-        row[s.model] = p
-          ? metric === "score"
-            ? p.score * 100
-            : p.latency === null
-              ? null
-              : p.latency / 1000
-          : null;
+        const change = s.changesByRun[r.id];
+        row[`${s.model}_improved`] = change?.improved ?? null;
+        row[`${s.model}_worsened`] = change?.worsened ?? null;
+        row[`${s.model}_unchanged`] = change?.unchanged ?? null;
+        row[s.model] = !p
+          ? null
+          : metric === "changes"
+            ? change
+              ? change.improved + change.worsened
+              : null
+            : metric === "score"
+              ? p.items.filter((a) => a.score === 1).length
+              : p.latency === null
+                ? null
+                : p.latency / 1000;
       }
       return row;
     });
@@ -393,7 +406,7 @@ export function Dashboard({
                 <p>
                   {model
                     ? active!.latest
-                      ? `${active!.series.length} complete observations. ${active!.status === "observing" ? "More comparable runs are needed before assessing change." : "Compare changes with item-level evidence below."}`
+                      ? `${active!.series.length} complete observation${active!.series.length === 1 ? "" : "s"}. ${active!.status === "observing" ? "More comparable runs are needed before assessing change." : "Compare changes with item-level evidence below."}`
                       : active!.partial
                         ? `${active!.partial.passed} of ${active!.partial.scored} graded tasks passed. The remaining task is not included.`
                         : "No complete, comparable observation is available yet."
@@ -429,8 +442,8 @@ export function Dashboard({
               <div className="model-table">
                 <div className="model-table-head">
                   <span>Model / execution</span>
-                  <span>Latest accuracy</span>
-                  <span>vs. baseline</span>
+                  <span>Outcome changes</span>
+                  <span>Task completion</span>
                   <span>Median latency</span>
                   <span>Signal</span>
                   <span />
@@ -457,37 +470,49 @@ export function Dashboard({
                           </span>
                         </div>
                       </div>
-                      <div className="model-score">
+                      <div
+                        className={cn(
+                          "model-change",
+                          s.changes && s.changes.worsened > 0 && "has-losses",
+                        )}
+                        aria-label={
+                          s.changes
+                            ? `${s.changes.worsened} tasks worsened, ${s.changes.improved} improved, ${s.changes.unchanged} unchanged compared with this model's previous run`
+                            : "A second complete run is needed for comparison"
+                        }
+                      >
+                        {s.changes ? (
+                          <span>
+                            <span className="outcome-loss">
+                              ↓ {s.changes.worsened}
+                            </span>
+                            <span className="outcome-gain">
+                              ↑ {s.changes.improved}
+                            </span>
+                          </span>
+                        ) : (
+                          <span>{s.latest ? "First run" : "—"}</span>
+                        )}
+                        <small>
+                          {s.changes
+                            ? `${s.changes.unchanged} unchanged · vs. previous`
+                            : s.latest
+                              ? "Awaiting repeat"
+                              : "—"}
+                        </small>
+                      </div>
+                      <div className="model-score secondary-completion">
                         {s.latest
-                          ? score(s.latest.score)
+                          ? `${s.latest.items.filter((a) => a.score === 1).length}/10`
                           : s.partial
                             ? `${s.partial.passed}/${s.partial.scored}`
                             : "—"}
                         <small>
                           {s.latest
-                            ? `${s.latest.items.filter((a) => a.score === 1).length} / 10 passed`
+                            ? "strict passes"
                             : s.partial
-                              ? "partial result"
+                              ? "partial panel"
                               : "Awaiting result"}
-                        </small>
-                      </div>
-                      <div
-                        className={cn(
-                          "delta",
-                          s.delta !== null && s.delta < 0 && "negative",
-                        )}
-                      >
-                        {s.delta == null || s.series.length < 7
-                          ? "—"
-                          : `${s.delta > 0 ? "+" : ""}${(s.delta * 100).toFixed(1)} pp`}
-                        <small>
-                          {s.series.length < 7
-                            ? s.series.length
-                              ? "More runs needed"
-                              : s.partial
-                                ? `${s.partial.scored}/10 tasks graded`
-                                : "—"
-                            : "vs. first 6 runs"}
                         </small>
                       </div>
                       <div>
@@ -530,7 +555,9 @@ export function Dashboard({
               <div className="section-heading">
                 <div>
                   <h2>
-                    {model ? "Performance history" : "Performance over time"}
+                    {model
+                      ? "Changes within this model"
+                      : "Changes within each model"}
                   </h2>
                 </div>
                 <span className="section-note">
@@ -540,16 +567,34 @@ export function Dashboard({
               <div className="chart-panel">
                 <div className="chart-toolbar">
                   <div className="metric-tabs" aria-label="Chart metric">
-                    {(["score", "latency"] as const).map((m) => (
+                    {(["changes", "score", "latency"] as const).map((m) => (
                       <button
                         key={m}
                         aria-pressed={metric === m}
                         onClick={() => setMetric(m)}
                       >
-                        {m === "score" ? "Task accuracy" : "Latency"}
+                        {m === "changes"
+                          ? "Item changes"
+                          : m === "score"
+                            ? "Task completion"
+                            : "Latency"}
                       </button>
                     ))}
                   </div>
+                  <select
+                    className="mobile-metric-select"
+                    aria-label="History metric"
+                    value={metric}
+                    onChange={(e) =>
+                      setMetric(
+                        e.target.value as "changes" | "score" | "latency",
+                      )
+                    }
+                  >
+                    <option value="changes">Item changes</option>
+                    <option value="score">Task completion</option>
+                    <option value="latency">Latency</option>
+                  </select>
                   <div className="chart-controls">
                     <div className="range-tabs" aria-label="History range">
                       {[7, 30, 90].map((d) => (
@@ -582,16 +627,22 @@ export function Dashboard({
                 </div>
                 <div className="chart-caption">
                   <span>
-                    {metric === "score"
-                      ? "Share of fixed tasks passed (%)"
-                      : "Median end-to-end duration (seconds)"}
+                    {metric === "changes"
+                      ? "Tasks with changed pass/fail outcomes vs. previous run"
+                      : metric === "score"
+                        ? "Tasks passed (out of 10)"
+                        : "Median end-to-end duration (seconds)"}
                   </span>
-                  <span>{chartRows.length} comparable observations</span>
+                  <span>
+                    {metric === "changes"
+                      ? `${chartRows.filter((row) => visible.some((m) => row[m] !== null)).length} comparisons`
+                      : `${chartRows.length} observations`}
+                  </span>
                 </div>
                 <div
                   className="chart-area"
                   role="img"
-                  aria-label={`${metric === "score" ? "Accuracy" : "Latency"} history over ${days} days. ${chartHasData ? `${chartRows.length} observations.` : "No observations available."}`}
+                  aria-label={`${metric === "changes" ? "Item outcome changes" : metric === "score" ? "Task completion" : "Latency"} history over ${days} days. ${chartHasData ? `${chartRows.length} observations.` : metric === "changes" && chartRows.length ? `${chartRows.length} observation recorded; a repeat is needed for comparison.` : "No observations available."}`}
                 >
                   {chartHasData ? (
                     <ResponsiveContainer width="100%" height="100%">
@@ -615,7 +666,8 @@ export function Dashboard({
                           tick={{ fill: "var(--muted)", fontSize: 11 }}
                         />
                         <YAxis
-                          domain={metric === "score" ? [0, 100] : [0, "auto"]}
+                          domain={metric === "latency" ? [0, "auto"] : [0, 10]}
+                          allowDecimals={metric === "latency"}
                           tickLine={false}
                           axisLine={false}
                           tick={{ fill: "var(--muted)", fontSize: 11 }}
@@ -624,10 +676,20 @@ export function Dashboard({
                           labelFormatter={(v) =>
                             date(new Date(Number(v)).toISOString(), true)
                           }
-                          formatter={(value, name) => [
-                            `${Number(value).toFixed(1)}${metric === "score" ? "%" : " s"}`,
-                            MODEL_NAMES[name as Model],
-                          ]}
+                          formatter={(value, name, entry) => {
+                            const row = entry.payload as Record<
+                              string,
+                              string | number | null
+                            >;
+                            return [
+                              metric === "changes"
+                                ? `${row[`${name}_worsened`]} worsened · ${row[`${name}_improved`]} improved · ${row[`${name}_unchanged`]} unchanged`
+                                : metric === "score"
+                                  ? `${Number(value).toFixed(0)}/10 passed`
+                                  : `${Number(value).toFixed(1)} s`,
+                              MODEL_NAMES[name as Model],
+                            ];
+                          }}
                           contentStyle={{
                             background: "var(--panel)",
                             border: "1px solid var(--line)",
@@ -653,8 +715,8 @@ export function Dashboard({
                   ) : (
                     <div className="empty-chart">
                       <div className="axis-labels">
-                        {(metric === "score"
-                          ? ["100", "75", "50", "25", "0"]
+                        {(metric !== "latency"
+                          ? ["10", "8", "5", "2", "0"]
                           : ["—", "—", "—", "—", "—"]
                         ).map((v, i) => (
                           <span key={i}>{v}</span>
@@ -669,10 +731,16 @@ export function Dashboard({
                         <span className="empty-icon">
                           <Activity size={21} />
                         </span>
-                        <h3>History starts with the first run.</h3>
+                        <h3>
+                          {metric === "changes" && chartRows.length
+                            ? "The next run starts the comparison."
+                            : "History starts with the first run."}
+                        </h3>
                         <p>
                           {data.state === "connected"
-                            ? "Awaiting the first completed run."
+                            ? metric === "changes" && chartRows.length
+                              ? "One observation recorded. No change can be measured yet."
+                              : "Awaiting the first completed run."
                             : "The observation feed is unavailable."}
                         </p>
                         <Link href="/about">
@@ -715,60 +783,131 @@ export function Dashboard({
               </div>
               <div className="chart-footnote">
                 <Info size={12} />
-                <p>Panel accuracy is not a measure of general intelligence.</p>
+                <p>
+                  {metric === "changes"
+                    ? "Changes include improvements and declines. Compare each model with its own previous run."
+                    : metric === "score"
+                      ? "Strict completion is a secondary measure. It does not capture partial progress."
+                      : "Execution time is tracked separately from task outcomes."}
+                </p>
               </div>
             </section>
             {model && (
-              <section className="capability-section">
+              <section className="item-results-section">
                 <div className="section-heading">
-                  <div>
-                    <span className="section-number">03</span>
-                    <h2>Inside the panel</h2>
-                  </div>
-                  <Link href="/evidence">
-                    View task results <ArrowRight size={13} />
-                  </Link>
+                  <h2>Task outcomes</h2>
+                  <span className="section-note">
+                    Latest result · compared within this model
+                  </span>
                 </div>
-                <div className="capability-grid">
-                  {Array.from(new Set(data.tasks.map((t) => t.capability))).map(
-                    (cap) => {
-                      const ids = data.tasks
-                        .filter((t) => t.capability === cap)
-                        .map((t) => t.id);
-                      const values =
-                        active!.latest?.items.filter((a) =>
-                          ids.includes(a.task_id),
-                        ) ?? [];
+                <div className="item-results-table">
+                  <div className="item-results-head">
+                    <span>Task</span>
+                    <span>Latest outcome</span>
+                    <span>vs. previous run</span>
+                    <span>Measured detail</span>
+                  </div>
+                  {data.tasks
+                    .filter(
+                      (t) =>
+                        t.suite_id ===
+                        (active!.latest?.suiteId ?? data.suite?.id),
+                    )
+                    .map((task) => {
+                      const item = (
+                        active!.partial?.items ??
+                        active!.latest?.items ??
+                        []
+                      ).find((a) => a.task_id === task.id);
+                      const change = active!.partial
+                        ? undefined
+                        : active!.changes?.items.find(
+                            (c) => c.taskId === task.id,
+                          );
+                      const variability = active!.variability.find(
+                        (v) => v.taskId === task.id,
+                      );
+                      const previous = active!.partial
+                        ? undefined
+                        : active!.series
+                            .at(-2)
+                            ?.items.find((a) => a.task_id === task.id);
+                      const diagnostics = taskDiagnostics(item, previous);
                       return (
-                        <div key={cap} className="capability">
-                          <span>{cap}</span>
-                          <strong>
-                            {values.length
-                              ? score(
-                                  values.reduce(
-                                    (s, a) => s + (a.score ?? 0),
-                                    0,
-                                  ) / values.length,
-                                )
-                              : "—"}
-                          </strong>
-                          <div className="capability-track">
-                            <span
-                              style={{
-                                width: values.length
-                                  ? `${(values.reduce((s, a) => s + (a.score ?? 0), 0) / values.length) * 100}%`
-                                  : "0%",
-                              }}
-                            />
+                        <div key={task.id} className="item-result-row">
+                          <div>
+                            <strong>{task.title}</strong>
+                            <small>{task.capability}</small>
                           </div>
-                          <small>
-                            {ids.length} fixed item{ids.length === 1 ? "" : "s"}{" "}
-                            · {values.length ? "latest run" : "awaiting data"}
-                          </small>
+                          <div>
+                            <span
+                              className={cn(
+                                "result",
+                                item?.score === 1
+                                  ? "pass"
+                                  : item?.score === 0
+                                    ? "fail"
+                                    : "infra",
+                              )}
+                            >
+                              {item?.score == null
+                                ? "Unavailable"
+                                : item.score === 1
+                                  ? "Passed"
+                                  : "Not passed"}
+                            </span>
+                            {variability && variability.n > 1 && (
+                              <small>
+                                {variability.flips} outcome flip
+                                {variability.flips === 1 ? "" : "s"} /{" "}
+                                {variability.n} runs
+                              </small>
+                            )}
+                          </div>
+                          <div
+                            className={cn("item-direction", change?.direction)}
+                          >
+                            {change
+                              ? change.direction === "unchanged"
+                                ? "Unchanged"
+                                : change.direction === "improved"
+                                  ? "Improved"
+                                  : "Worsened"
+                              : "—"}
+                          </div>
+                          <div className="item-diagnostics">
+                            {diagnostics.length ? (
+                              diagnostics.map((d) => (
+                                <span key={d.label}>
+                                  {d.label}: <strong>{d.value}</strong>
+                                  {d.change && (
+                                    <em className="diagnostic-delta">
+                                      {" "}
+                                      ({d.change})
+                                    </em>
+                                  )}
+                                </span>
+                              ))
+                            ) : (
+                              <span>
+                                {item?.score == null
+                                  ? "—"
+                                  : "Strict answer check"}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       );
-                    },
-                  )}
+                    })}
+                </div>
+                <div className="item-results-note">
+                  <span>
+                    Diagnostics retain each task’s own units. They are not
+                    combined into an intelligence score.
+                  </span>
+                  <Link href="/evidence">
+                    Full records <ArrowRight size={13} />
+                  </Link>
                 </div>
               </section>
             )}
@@ -1166,8 +1305,9 @@ function Methodology({ data }: { data: Snapshot }) {
             Ten tasks give a limited view. They can expose changes in specific
             behaviours, but they cannot measure general intelligence. Repeated
             answers are correlated, and a single bad result may be ordinary
-            variation. Infrastructure failures are kept separate from wrong
-            answers.
+            variation. We show outcome changes within each model and retain
+            task-specific diagnostics where available. Completion counts are a
+            secondary measure; latency and execution errors remain separate.
           </p>
         </section>
         <div className="about-links">

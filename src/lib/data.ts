@@ -17,7 +17,7 @@ export function publicDb() {
   });
 }
 const summaryFields =
-  "id,run_id,task_id,model,runtime_model,reasoning_effort,completed_at,started_at,latency_ms,execution_status,score,response_hash,input_tokens,output_tokens,cost_usd";
+  "id,run_id,task_id,model,runtime_model,reasoning_effort,completed_at,started_at,latency_ms,execution_status,score,response_hash,grading,input_tokens,output_tokens,cost_usd";
 export async function getSnapshot(fullEvidence = false): Promise<Snapshot> {
   const base: Snapshot = {
     state: "unconfigured",
