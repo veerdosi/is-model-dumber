@@ -660,7 +660,7 @@ export function Dashboard({
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart
                         data={chartRows}
-                        margin={{ top: 12, right: 20, left: -18, bottom: 8 }}
+                        margin={{ top: 12, right: 32, left: -18, bottom: 8 }}
                       >
                         <CartesianGrid
                           stroke="var(--line)"
@@ -671,6 +671,7 @@ export function Dashboard({
                           dataKey="time"
                           type="number"
                           domain={["dataMin", "dataMax"]}
+                          padding={{ left: 8, right: 12 }}
                           tickFormatter={(v) => date(new Date(v).toISOString())}
                           tickLine={false}
                           axisLine={false}
@@ -678,7 +679,13 @@ export function Dashboard({
                           tick={{ fill: "var(--muted)", fontSize: 11 }}
                         />
                         <YAxis
-                          domain={metric === "latency" ? [0, "auto"] : [0, 10]}
+                          domain={
+                            metric === "latency"
+                              ? [0, "auto"]
+                              : metric === "changes"
+                                ? [0, (max: number) => Math.max(2, max + 1)]
+                                : [0, 10]
+                          }
                           allowDecimals={metric === "latency"}
                           tickLine={false}
                           axisLine={false}
@@ -709,14 +716,19 @@ export function Dashboard({
                             fontSize: 12,
                           }}
                         />
-                        {visible.map((m) => (
+                        {visible.map((m, index) => (
                           <Line
                             key={m}
                             dataKey={m}
                             name={m}
                             stroke={MODEL_COLORS[m]}
                             strokeWidth={2}
-                            dot={{ r: 3, strokeWidth: 0 }}
+                            dot={{
+                              r: metric === "changes" ? 7 - index * 2 : 3,
+                              fill: MODEL_COLORS[m],
+                              stroke: "var(--panel)",
+                              strokeWidth: 1,
+                            }}
                             activeDot={{ r: 5 }}
                             connectNulls={false}
                             isAnimationActive={false}
@@ -785,6 +797,9 @@ export function Dashboard({
                       >
                         <span style={{ background: MODEL_COLORS[m] }} />
                         {MODEL_NAMES[m]}
+                        {metric === "changes" && typeof chartRows.at(-1)?.[m] === "number" && (
+                          <> · {chartRows.at(-1)?.[m]} changed</>
+                        )}
                       </button>
                     ))}
                   </div>
@@ -797,7 +812,7 @@ export function Dashboard({
                 <Info size={12} />
                 <p>
                   {metric === "changes"
-                    ? "Changes include improvements and declines. Compare each model with its own previous run."
+                    ? "Each point compares a run with the previous run. The first run has no comparison; lines appear after another repeat."
                     : metric === "score"
                       ? "Strict completion is a secondary measure. It does not capture partial progress."
                       : "Execution time is tracked separately from task outcomes."}
