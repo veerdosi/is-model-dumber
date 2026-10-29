@@ -11,6 +11,7 @@ scores, native session logs and run plans are excluded from Git and public histo
 | A host temporary directory was outside the macOS VM's shared mounts | Put submission files in the ignored project-local private directory and use a strict bind mount | A missing source now causes a mount error instead of silently creating a directory |
 | Native session finals used `phase=final_answer` instead of `channel=final` | Accept both documented runtime record forms | Model and reasoning evidence still come from `turn_context`, never the response text |
 | An interrupted chat can interrupt its active evaluation agents | Treat interrupted/incomplete work as unfinished; replace setup-debug contexts before accepting a baseline | Resume the run plan, keep published data gated, and never invent terminal responses |
+| The local Docker VM can be stopped between manual runs | Start the existing Colima VM and regrade the unchanged saved code responses | If Docker is unavailable, restore the grader before publication; never rerun a valid model response or turn a grading outage into a wrong answer |
 
 Reference and output data are separate from task execution. Adapter repairs regrade
 the unchanged original response when execution was valid. A setup problem that
