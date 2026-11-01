@@ -353,17 +353,9 @@ export function Dashboard({
           <>
             <section className="hero">
               <div className="hero-copy">
-                <div className="eyebrow">
-                  <span className="tiny-cross">+</span> INDEPENDENT PERFORMANCE
-                  MONITOR{" "}
-                </div>
                 <h1>
                   {model ? (
-                    <>
-                      {MODEL_NAMES[model]}
-                      <br />
-                      <span>Under observation.</span>
-                    </>
+                    MODEL_NAMES[model]
                   ) : (
                     <>
                       Is ChatGPT
@@ -372,16 +364,7 @@ export function Dashboard({
                     </>
                   )}
                 </h1>
-                <p>
-                  {model
-                    ? "A longitudinal record of this model’s performance. Every observation uses the same fixed tasks and medium reasoning."
-                    : "We repeat the same ten tasks on three models."}
-                </p>
-                <div className="hero-links">
-                  <Link href="/about">
-                    About the project <ArrowRight size={14} />
-                  </Link>
-                </div>
+                {!model && <p>We repeat the same ten tasks on three models.</p>}
               </div>
               <aside
                 className={cn("verdict-panel", hasRegressions && "warning")}
@@ -732,20 +715,12 @@ export function Dashboard({
                           <Activity size={21} />
                         </span>
                         <h3>
-                          {metric === "changes" && chartRows.length
-                            ? "The next run starts the comparison."
-                            : "History starts with the first run."}
+                          {data.state !== "connected"
+                            ? "Data unavailable"
+                            : metric === "changes" && chartRows.length
+                              ? "Another run is needed for comparison."
+                              : "No runs yet."}
                         </h3>
-                        <p>
-                          {data.state === "connected"
-                            ? metric === "changes" && chartRows.length
-                              ? "One observation recorded. No change can be measured yet."
-                              : "Awaiting the first completed run."
-                            : "The observation feed is unavailable."}
-                        </p>
-                        <Link href="/about">
-                          How it works <ArrowRight size={13} />
-                        </Link>
                       </div>
                       <div className="empty-chart-bottom">
                         <span>{days} days ago</span>
@@ -899,11 +874,7 @@ export function Dashboard({
         )}
         {view === "evidence" && (
           <>
-            <PageHeading
-              eyebrow="THE OPEN RECORD"
-              title="Inspect the evidence."
-              description="Responses, scores, settings, and grading records for every published observation."
-            />
+            <PageHeading title="Evidence" />
             <div className="evidence-tools">
               <label className="search-box">
                 <Search size={16} />
@@ -1064,11 +1035,7 @@ export function Dashboard({
         )}
         {view === "incidents" && (
           <>
-            <PageHeading
-              eyebrow="THE OBSERVATION LOG"
-              title="Changes worth investigating."
-              description="Regressions, recoveries, and infrastructure failures. Every entry records its evidence and the limits of what it tells us."
-            />
+            <PageHeading title="Incidents" />
             <IncidentList data={data} />
           </>
         )}
@@ -1158,31 +1125,21 @@ export function Dashboard({
     </>
   );
 }
-function PageHeading({
-  eyebrow,
-  title,
-  description,
-}: {
-  eyebrow: string;
-  title: string;
-  description: string;
-}) {
+function PageHeading({ title }: { title: string }) {
   return (
     <section className="page-heading">
-      <span className="eyebrow">+ {eyebrow}</span>
       <h1>{title}</h1>
-      <p>{description}</p>
     </section>
   );
 }
-function Empty({ title, detail }: { title: string; detail: string }) {
+
+function Empty({ title }: { title: string; detail: string }) {
   return (
     <div className="empty-state">
       <span className="empty-icon">
         <FlaskConical size={20} />
       </span>
       <h3>{title}</h3>
-      <p>{detail}</p>
     </div>
   );
 }
@@ -1217,12 +1174,7 @@ function IncidentList({ data, model }: { data: Snapshot; model?: Model }) {
         <div className="quiet-log">
           <span className="incident-marker neutral" />
           <div>
-            <span className="eyebrow">NO INCIDENTS RECORDED</span>
-            <h3>
-              {data.attempts.length
-                ? "No noteworthy changes logged."
-                : "Observation begins with the first run."}
-            </h3>
+            <h3>No incidents recorded.</h3>
           </div>
         </div>
       )}
@@ -1232,47 +1184,31 @@ function IncidentList({ data, model }: { data: Snapshot; model?: Model }) {
 function Methodology({ data }: { data: Snapshot }) {
   return (
     <div className="about-page">
-      <PageHeading
-        eyebrow="ABOUT THE PROJECT"
-        title="Is the model changing?"
-        description="isModelDumber tracks how three Codex models perform on the same ten tasks over time."
-      />
+      <PageHeading title="About" />
       <div className="about-copy">
         <section>
-          <h2>What we measure</h2>
+          <h2>The evaluation</h2>
           <p>
-            We run GPT-6.1 Terra, GPT-6 Luna, and GPT-6.1 Sol as native Codex
-            subagents, all at medium reasoning. Each model gets a fresh context
-            for each task. The panel includes abstract puzzles, programming,
-            mathematics, and a real interactive environment.
-          </p>
-        </section>
-        <section>
-          <h2>How it works</h2>
-          <p>
-            Each manually triggered run contains 30 attempts: ten tasks per
-            model. Deterministic graders check the answers and code, and
-            interactive actions are replayed independently. Running out of task time
-            counts as a failure; broken environments remain unscored. The first panel
-            stays fixed for 21 days
+            GPT-6.1 Terra, GPT-6 Luna, and GPT-6.1 Sol each attempt ten fixed
+            tasks through native Codex subagents at medium reasoning, with a
+            fresh context per task. The tasks stay fixed for 21 days
             {data.suite ? `, through ${date(data.suite.frozen_until)}` : ""}.
           </p>
+        </section>
+        <section>
+          <h2>Scoring</h2>
           <p>
-            We compare each model with its own history. Six complete runs
-            establish the initial baseline; three more are needed before
-            flagging a persistent decline. A flag is a reason to investigate,
-            not a claim of statistical significance.
+            Deterministic graders check answers and code. Interactive actions
+            are replayed independently. Running out of task time counts as
+            failure; broken environments remain unscored.
           </p>
         </section>
         <section>
-          <h2>What the numbers can tell us</h2>
+          <h2>Detecting changes</h2>
           <p>
-            Ten tasks give a limited view. They can expose changes in specific
-            behaviours, but they cannot measure general intelligence. Repeated
-            answers are correlated, and a single bad result may be ordinary
-            variation. We show outcome changes within each model and retain
-            task-specific diagnostics where available. Completion counts are a
-            secondary measure; latency and execution errors remain separate.
+            Each model is compared with its own history: six baseline runs, then
+            three recent runs before flagging a persistent decline. Ten repeated
+            tasks cannot measure general intelligence.
           </p>
         </section>
         <div className="about-links">
@@ -1286,9 +1222,6 @@ function Methodology({ data }: { data: Snapshot }) {
             Download data <Download size={14} />
           </a>
         </div>
-        <p className="about-independent">
-          An independent project. Not affiliated with OpenAI.
-        </p>
       </div>
     </div>
   );
