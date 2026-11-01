@@ -17,3 +17,8 @@ Reference and output data are separate from task execution. Adapter repairs regr
 the unchanged original response when execution was valid. A setup problem that
 changes available task time requires a fresh context with the correct environment.
 Only verified measurements are eligible for public publication.
+
+A valid task reaching its fixed deadline is a task outcome, not a missing
+measurement. Record the coordinator deadline before interrupting; replay interactive
+actions with the existing grader. An audit correction repairs the earlier
+missing-final classification without overwriting original evidence.

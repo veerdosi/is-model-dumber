@@ -54,8 +54,13 @@ Run the reference validator once during setup, before a baseline:
 
 ## Failures and recovery
 
-A wrong answer scores 0. An unverified runtime identity, missing environment,
-unavailable grader, or native infrastructure fault scores null. Incomplete
+A wrong answer or coordinator-confirmed task-budget exhaustion scores 0. For
+interactive tasks, the existing trusted engine replay determines success from actions
+within the budget; a missing final reporting message alone does not invalidate play.
+Record `npx tsx scripts/eval/cli.ts deadline <exact-agent-name>` immediately before
+the native interrupt at 480 seconds. Never mark a user interruption or native crash
+as task-budget exhaustion. An unverified runtime identity, missing environment,
+unavailable grader, or native infrastructure fault scores null. Genuinely unavailable
 model panels do not become accuracy points. A complete model can still be viewed
 if another model’s panel is incomplete. Native task timeouts are separate from
 wrong answers. Interrupt overdue agents; never silently extend task budgets.
@@ -89,3 +94,10 @@ response hash or score. Normal publication still requires all 30 terminal jobs.
 
 Setup-debug records do not belong in public history or Git history. Keep only
 general causes and prevention notes in `docs/setup-fixes.md`.
+
+Published classification repairs use append-only `attempt_corrections`. Original
+responses, traces, scores and error classifications remain available in exports.
+`npx tsx scripts/eval/correct-deadline.ts <job-directory>` requires a verified runtime,
+a coordinator deadline marker and independent replay of valid interactive actions.
+This repairs orchestration classification; it does not change the frozen task,
+game seed, grader, action cap or budget.

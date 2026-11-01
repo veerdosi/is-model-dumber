@@ -415,19 +415,6 @@ export function Dashboard({
                           ? "Establishing a baseline."
                           : "Awaiting first results."}
                 </div>
-                <p>
-                  {model
-                    ? active!.latest
-                      ? `${active!.series.length} complete observation${active!.series.length === 1 ? "" : "s"}. ${active!.status === "observing" ? "More comparable runs are needed before assessing change." : "Compare changes with item-level evidence below."}`
-                      : active!.partial
-                        ? `${active!.partial.passed} of ${active!.partial.scored} graded tasks passed. The remaining task is not included.`
-                        : "No complete, comparable observation is available yet."
-                    : hasRegressions
-                      ? "At least one model shows a persistent decline on this task panel. This is an exploratory signal, not a confirmed change in general intelligence."
-                      : baselinesReady
-                        ? "Recent observations do not show a persistent decline on this fixed task panel. This does not establish that capabilities are unchanged."
-                        : "The baseline is still being collected."}
-                </p>
                 <div className="verdict-meta-inline">
                   <span>
                     {data.runs.length} published evaluation
@@ -797,9 +784,10 @@ export function Dashboard({
                       >
                         <span style={{ background: MODEL_COLORS[m] }} />
                         {MODEL_NAMES[m]}
-                        {metric === "changes" && typeof chartRows.at(-1)?.[m] === "number" && (
-                          <> · {chartRows.at(-1)?.[m]} changed</>
-                        )}
+                        {metric === "changes" &&
+                          typeof chartRows.at(-1)?.[m] === "number" && (
+                            <> · {chartRows.at(-1)?.[m]} changed</>
+                          )}
                       </button>
                     ))}
                   </div>
@@ -807,16 +795,6 @@ export function Dashboard({
                     Fixed panel · {data.suite?.id ?? "Panel being prepared"}
                   </span>
                 </div>
-              </div>
-              <div className="chart-footnote">
-                <Info size={12} />
-                <p>
-                  {metric === "changes"
-                    ? "Each point compares a run with the previous run. The first run has no comparison; lines appear after another repeat."
-                    : metric === "score"
-                      ? "Strict completion is a secondary measure. It does not capture partial progress."
-                      : "Execution time is tracked separately from task outcomes."}
-                </p>
               </div>
             </section>
             {model && (
@@ -928,28 +906,10 @@ export function Dashboard({
                     })}
                 </div>
                 <div className="item-results-note">
-                  <span>
-                    Diagnostics retain each task’s own units. They are not
-                    combined into an intelligence score.
-                  </span>
                   <Link href="/evidence">
                     Full records <ArrowRight size={13} />
                   </Link>
                 </div>
-              </section>
-            )}
-            {data.incidents.some((i) => !model || i.model === model) && (
-              <section className="home-incidents">
-                <div className="section-heading">
-                  <h2>Recent changes</h2>
-                  <Link href="/incidents">
-                    All incidents <ArrowRight size={13} />
-                  </Link>
-                </div>
-                <IncidentList
-                  data={{ ...data, incidents: data.incidents.slice(0, 2) }}
-                  model={model}
-                />
               </section>
             )}
           </>

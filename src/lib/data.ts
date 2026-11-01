@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { applyCorrections, correctedRuns } from "./corrections";
 import type { Snapshot, Attempt } from "./types";
 export function publicDb() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -95,13 +96,29 @@ export async function getSnapshot(fullEvidence = false): Promise<Snapshot> {
         if ((page.data?.length ?? 0) < 1000) break;
       }
     }
+    const corrections = await db
+      .from("attempt_corrections")
+      .select("*")
+      .in(
+        "attempt_id",
+        attempts.map((a) => a.id),
+      );
+    if (corrections.error) return { ...base, state: "unavailable" };
+    attempts = applyCorrections(attempts, corrections.data ?? []);
     return {
       ...base,
       state: "connected",
       tasks: tasks.data ?? [],
-      runs: mergedRuns,
+      runs: correctedRuns(mergedRuns, attempts),
       attempts,
-      incidents: incidents.data ?? [],
+      incidents: (incidents.data ?? []).filter(
+        (i) =>
+          i.kind !== "infrastructure" ||
+          attempts.some(
+            (a) =>
+              a.run_id === i.run_id && a.model === i.model && a.score === null,
+          ),
+      ),
       suite,
     };
   } catch {
@@ -113,5 +130,11 @@ export async function getAttempt(id: string) {
   const db = publicDb();
   if (!db) return null;
   const r = await db.from("attempts").select("*").eq("id", id).single();
-  return r.error ? null : (r.data as Attempt);
+  if (r.error) return null;
+  const c = await db
+    .from("attempt_corrections")
+    .select("*")
+    .eq("attempt_id", id);
+  if (c.error) return null;
+  return applyCorrections([r.data as Attempt], c.data ?? [])[0];
 }

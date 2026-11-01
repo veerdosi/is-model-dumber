@@ -30,12 +30,15 @@ explicit model overrides and `reasoning_effort="medium"`. Exactly these models:
    POST {"action":1|2|3|4} with its Bearer token; inspect frame.png with image tools.
    Never expose environment source or let agents use another job's broker. Brokers
    expire after the fixed budget. The real official engine is mandatory.
-5. Enforce limits with native interrupts if an evaluator is still working at
-   480 seconds. No coaching, hints, response repair, or extra solving turns.
+5. At 480 seconds run `npx tsx scripts/eval/cli.ts deadline <exact-agent-name>`
+   and immediately interrupt that native evaluator. The coordinator marker distinguishes
+   task-budget exhaustion from an unexplained native interruption. No coaching, hints, response repair, or extra solving turns.
 6. `npm run eval:grade` collects final responses and configuration from native
    Codex session JSONL, checks every turn's actual model and reasoning effort, and
    grades independently. It collects only matching agent paths for this run.
-   Missing identity, grader errors, or timeout must not become incorrect scores.
+   Missing identity, grader errors, or unexplained native interruptions remain unscored.
+   A coordinator-confirmed task deadline is a scored task failure; interactive
+   actions are independently replayed even without a final reporting message.
    If a local setup/broker bug occurs before any valid task actions, fix it and
    replace that setup attempt with a fresh independent context; the user explicitly
    asked not to publish setup-debug failures. Genuine evaluation failures remain
@@ -79,3 +82,10 @@ This version has breaking changes — APIs, conventions, and file structure may 
 This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
 
 <!-- END:nextjs-agent-rules -->
+
+Published classification repairs use append-only `attempt_corrections`. Original
+responses, traces, scores and error classifications remain available in exports.
+`npx tsx scripts/eval/correct-deadline.ts <job-directory>` requires a verified runtime,
+a coordinator deadline marker and independent replay of valid interactive actions.
+This repairs orchestration classification; it does not change the frozen task,
+game seed, grader, action cap or budget.

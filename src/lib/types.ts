@@ -57,6 +57,11 @@ export type Attempt = {
   input_tokens: number | null;
   output_tokens: number | null;
   cost_usd: number | null;
+  correction?: {
+    reason: string;
+    created_at: string;
+    original: { score: number | null; execution_status: string; grading: Record<string, unknown>; error: unknown };
+  };
 };
 export type Incident = {
   id: string;

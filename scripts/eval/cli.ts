@@ -14,6 +14,7 @@ import { randomUUID, createHash } from "node:crypto";
 import { execFileSync, spawn } from "node:child_process";
 import { createClient } from "@supabase/supabase-js";
 import { MODELS, type Attempt, type Run } from "../../src/lib/types";
+import { applyCorrections, correctedRuns } from "../../src/lib/corrections";
 import { summarize } from "../../src/lib/monitor";
 nextEnv.loadEnvConfig(process.cwd());
 const root = process.cwd(),
@@ -303,6 +304,25 @@ if (command === "seed") {
   );
   child.unref();
   console.log("Started job-specific ARC3 broker for", model, "pid", child.pid);
+} else if (command === "deadline") {
+  const { plan } = load();
+  const job = plan.jobs.find((j: any) => j.agent === process.argv[3]);
+  if (!job) throw new Error("Specify the exact planned agent name");
+  const record = collect(job.agent, plan.startedAt);
+  if (
+    !record ||
+    record.final ||
+    Date.now() - Date.parse(record.startedAt) < 480000
+  )
+    throw new Error("No active evaluator at the fixed deadline");
+  save(join(job.workdir, "deadline.json"), {
+    kind: "task_budget_exhausted",
+    deadline: new Date(Date.parse(record.startedAt) + 480000).toISOString(),
+    recordedAt: new Date().toISOString(),
+    agent: job.agent,
+    sessionId: record.sessionId,
+  });
+  console.log("Deadline recorded. Interrupt the native agent now.");
 } else if (
   command === "status" ||
   command === "collect" ||
@@ -343,20 +363,30 @@ if (command === "seed") {
     const latency =
       Date.parse(record.finishedAt) - Date.parse(record.startedAt);
     let grading: any;
-    if (expired)
-      grading = {
-        infrastructure_error:
-          "Observed native session did not return a final response within 480 seconds.",
-      };
-    else if (!valid)
+    const deadlinePath = join(job.workdir, "deadline.json");
+    const deadline = existsSync(deadlinePath)
+      ? JSON.parse(readFileSync(deadlinePath, "utf8"))
+      : null;
+    const taskDeadline =
+      valid &&
+      expired &&
+      deadline?.kind === "task_budget_exhausted" &&
+      deadline.sessionId === record.sessionId;
+    if (!valid)
       grading = {
         infrastructure_error:
           "Requested model/medium reasoning could not be verified from native runtime turn_context.",
       };
-    else if (latency > 480000 && job.taskId !== "03-arc3")
+    else if (expired && !taskDeadline)
       grading = {
         infrastructure_error:
-          "Native execution exceeded the fixed wall-clock budget.",
+          "Native session ended without a final response; no coordinator-confirmed task deadline.",
+      };
+    else if ((taskDeadline || latency > 480000) && job.taskId !== "03-arc3")
+      grading = {
+        score: 0,
+        reason: "Task time budget exhausted",
+        termination: "task_budget_exhausted",
       };
     else if (command === "grade") {
       try {
@@ -382,6 +412,12 @@ if (command === "seed") {
         }
       }
     } else continue;
+    if (taskDeadline && !grading.infrastructure_error)
+      grading = {
+        ...grading,
+        termination: "task_budget_exhausted",
+        deadline_evidence: deadline,
+      };
     const a: any = {
       id: randomUUID(),
       run_id: plan.id,
@@ -407,10 +443,12 @@ if (command === "seed") {
       completed_at: record.finishedAt,
       latency_ms: latency,
       execution_status: grading.infrastructure_error
-        ? expired || latency > 480000
+        ? expired && !taskDeadline
           ? "timeout"
           : "infrastructure_error"
-        : "success",
+        : grading.termination === "task_budget_exhausted" && grading.score !== 1
+          ? "task_error"
+          : "success",
       score: grading.infrastructure_error ? null : grading.score,
       response: record.final,
       response_hash: hash(record.final),
@@ -450,6 +488,11 @@ if (command === "seed") {
     job.status = "graded";
   }
   save(join(dir, "plan.json"), plan);
+  if (process.env.SUPABASE_URL && process.env.SUPABASE_SECRET_KEY) {
+    const corrections = await db().from("attempt_corrections").select("*");
+    if (corrections.error) throw new Error(corrections.error.message);
+    attempts.splice(0, attempts.length, ...applyCorrections(attempts, corrections.data ?? []));
+  }
   console.log(
     JSON.stringify(
       {
@@ -545,6 +588,11 @@ if (command === "seed") {
   const already = await must(
     client.from("runs").select("published,status").eq("id", run.id),
   );
+  const publishedCorrections = await must(client.from("attempt_corrections").select("attempt_id"));
+  if (already[0]?.published && publishedCorrections.some((c: any) => attempts.some((a: any) => a.id === c.attempt_id))) {
+    console.log("Run already published with audited corrections; original evidence unchanged.", run.id);
+    process.exit(0);
+  }
   if (already[0]?.published && already[0]?.status === "complete") {
     console.log(
       "Run already published; leaving immutable evidence unchanged.",
@@ -584,13 +632,22 @@ if (command === "seed") {
   const historyRuns = await must(
     client.from("runs").select("*").eq("published", true),
   );
-  const history = await must(client.from("attempts").select("*").limit(20000));
+  const originalHistory = await must(
+    client.from("attempts").select("*").limit(20000),
+  );
+  const corrections = await must(
+    client.from("attempt_corrections").select("*"),
+  );
+  const history = applyCorrections(originalHistory, corrections);
   const incidents: any[] = [];
   for (const model of MODELS) {
     const summary = summarize(
       model,
       [...history.filter((a: any) => a.run_id !== run.id), ...attempts],
-      [...historyRuns.filter((r: any) => r.id !== run.id), run],
+      correctedRuns(
+        [...historyRuns.filter((r: any) => r.id !== run.id), run],
+        [...history.filter((a: any) => a.run_id !== run.id), ...attempts],
+      ),
     );
     if (["possible_regression", "recovery"].includes(summary.status))
       incidents.push({
