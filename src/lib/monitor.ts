@@ -163,7 +163,7 @@ export function median(xs: number[]) {
 }
 export const STATUS_LABELS: Record<Verdict, string> = {
   insufficient_evidence: "Awaiting observations",
-  observing: "Establishing baseline",
+  observing: "No clear trend yet",
   healthy: "No persistent decline observed",
   possible_regression: "Possible regression",
   supported_change: "Supported change",

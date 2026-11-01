@@ -412,7 +412,7 @@ export function Dashboard({
                       : baselinesReady
                         ? "No persistent decline observed"
                         : data.attempts.length
-                          ? "Establishing a baseline."
+                          ? "No clear trend yet."
                           : "Awaiting first results."}
                 </div>
                 <div className="verdict-meta-inline">
@@ -1223,11 +1223,6 @@ function IncidentList({ data, model }: { data: Snapshot; model?: Model }) {
                 ? "No noteworthy changes logged."
                 : "Observation begins with the first run."}
             </h3>
-            <p>
-              {data.attempts.length
-                ? "A quiet log is not proof that performance is unchanged."
-                : "Regressions and recoveries will appear here when comparable observations support them."}
-            </p>
           </div>
         </div>
       )}
