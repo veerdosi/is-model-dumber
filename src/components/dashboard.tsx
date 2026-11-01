@@ -434,13 +434,10 @@ export function Dashboard({
                     {model ? "Observation details" : "Models under observation"}
                   </h2>
                 </div>
-                <span className="section-note">
-                  Compared against their own history
-                </span>
               </div>
               <div className="model-table">
                 <div className="model-table-head">
-                  <span>Model / execution</span>
+                  <span>Model</span>
                   <span>Outcome changes</span>
                   <span>Task completion</span>
                   <span>Median latency</span>
@@ -464,9 +461,6 @@ export function Dashboard({
                         </span>
                         <div>
                           <strong>{MODEL_NAMES[s.model]}</strong>
-                          <span>
-                            Native subagent <i /> medium
-                          </span>
                         </div>
                       </div>
                       <div
@@ -506,21 +500,19 @@ export function Dashboard({
                           : s.partial
                             ? `${s.partial.passed}/${s.partial.scored}`
                             : "—"}
-                        <small>
-                          {s.latest
-                            ? "strict passes"
-                            : s.partial
-                              ? "partial panel"
+                        {!s.latest && (
+                          <small>
+                            {s.partial
+                              ? "Unavailable tasks excluded"
                               : "Awaiting result"}
-                        </small>
+                          </small>
+                        )}
                       </div>
                       <div>
                         {duration(s.latest?.latency)}
-                        <small>
-                          {s.errors
-                            ? `${s.errors} infrastructure failures`
-                            : "End-to-end"}
-                        </small>
+                        {s.errors > 0 && (
+                          <small>{s.errors} infrastructure failures</small>
+                        )}
                       </div>
                       <div>
                         <span
@@ -559,9 +551,6 @@ export function Dashboard({
                       : "Changes within each model"}
                   </h2>
                 </div>
-                <span className="section-note">
-                  Ten fixed tasks · medium reasoning
-                </span>
               </div>
               <div className="chart-panel">
                 <div className="chart-toolbar">
@@ -791,9 +780,6 @@ export function Dashboard({
                       </button>
                     ))}
                   </div>
-                  <span>
-                    Fixed panel · {data.suite?.id ?? "Panel being prepared"}
-                  </span>
                 </div>
               </div>
             </section>
@@ -801,9 +787,6 @@ export function Dashboard({
               <section className="item-results-section">
                 <div className="section-heading">
                   <h2>Task outcomes</h2>
-                  <span className="section-note">
-                    Latest result · compared within this model
-                  </span>
                 </div>
                 <div className="item-results-table">
                   <div className="item-results-head">
@@ -1097,7 +1080,6 @@ export function Dashboard({
             <Activity size={18} />
             isModel<span>Dumber</span>
           </Link>
-          <span>Tracking model performance.</span>
           <a href="/api/export">
             Open data <ArrowUpRight size={13} />
           </a>
@@ -1275,7 +1257,8 @@ function Methodology({ data }: { data: Snapshot }) {
           <p>
             Each manually triggered run contains 30 attempts: ten tasks per
             model. Deterministic graders check the answers and code, and
-            interactive actions are replayed independently. The first panel
+            interactive actions are replayed independently. Running out of task time
+            counts as a failure; broken environments remain unscored. The first panel
             stays fixed for 21 days
             {data.suite ? `, through ${date(data.suite.frozen_until)}` : ""}.
           </p>
